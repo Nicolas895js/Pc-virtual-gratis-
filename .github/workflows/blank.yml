@@ -1,0 +1,71 @@
+
+name: Cloud PC - Linux Desktop
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cloud-pc:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 350
+
+    steps:
+      - name: Atualizar o sistema
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            xfce4 xfce4-terminal dbus-x11 xrdp curl
+
+      - name: Configurar usuário do desktop
+        env:
+          PC_PASSWORD: ${{ secrets.PC_PASSWORD }}
+        run: |
+          if [ -z "$PC_PASSWORD" ]; then
+            echo "Configure o segredo PC_PASSWORD primeiro."
+            exit 1
+          fi
+
+          sudo useradd -m -s /bin/bash clouduser || true
+          echo "clouduser:$PC_PASSWORD" | sudo chpasswd
+          sudo usermod -aG ssl-cert clouduser
+
+          echo "startxfce4" | sudo tee /home/clouduser/.xsession
+          sudo chown clouduser:clouduser /home/clouduser/.xsession
+
+          sudo systemctl enable xrdp
+          sudo systemctl restart xrdp
+
+      - name: Instalar Tailscale
+        run: |
+          curl -fsSL https://tailscale.com/install.sh | sh
+
+      - name: Conectar à rede privada
+        env:
+          TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
+        run: |
+          if [ -z "$TS_AUTHKEY" ]; then
+            echo "Configure o segredo TS_AUTHKEY primeiro."
+            exit 1
+          fi
+
+          sudo tailscale up \
+            --authkey="$TS_AUTHKEY" \
+            --hostname=github-cloud-pc
+
+          sudo tailscale ip -4
+
+      - name: Verificar serviços
+        run: |
+          sudo systemctl --no-pager status xrdp
+          echo "O desktop está preparado."
+          echo "Consulte o IP Tailscale nos logs acima."
+
+      - name: Manter a sessão disponível
+        run: |
+          echo "A máquina é temporária."
+          echo "O desktop ficará disponível enquanto o job estiver ativo."
+          sleep 18000
+          
