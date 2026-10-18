@@ -1,0 +1,139 @@
+
+name: Cloud Gamer PC - Build
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloud-gamer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Validate and Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Baixar codigo do repositorio
+        uses: actions/checkout@v4
+
+      - name: Instalar Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Verificar arquivos obrigatorios
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for file in \
+            Dockerfile \
+            docker-compose.yml \
+            .env.example \
+            README.md \
+            scripts/start.sh \
+            scripts/stop.sh \
+            scripts/diagnose.sh
+          do
+            if [ ! -f "$file" ]; then
+              echo "::error::Arquivo ausente: $file"
+              exit 1
+            fi
+          done
+
+          echo "Todos os arquivos obrigatorios existem."
+
+      - name: Validar Docker Compose
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cp .env.example .env
+
+          docker compose config --quiet
+
+          rm -f .env
+
+          echo "Configuracao Docker Compose valida."
+
+      - name: Construir imagem Docker
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          IMAGE_TAG="cloud-gamer-desktop:${GITHUB_SHA::12}"
+
+          docker build \
+            --pull \
+            --tag "$IMAGE_TAG" \
+            .
+
+          docker image inspect "$IMAGE_TAG" >/dev/null
+
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+
+      - name: Preparar artefatos
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p dist
+
+          docker save "$IMAGE_TAG" \
+            --output dist/cloud-gamer-desktop.tar
+
+          cp docker-compose.yml dist/
+          cp Dockerfile dist/
+          cp .env.example dist/
+          cp README.md dist/
+
+          cp -r scripts dist/scripts
+
+          printf 'Commit: %s\n' "$GITHUB_SHA" \
+            > dist/BUILD-INFO.txt
+
+          printf 'Image: %s\n' "$IMAGE_TAG" \
+            >> dist/BUILD-INFO.txt
+
+          printf 'This artifact is not a running server.\n' \
+            >> dist/BUILD-INFO.txt
+
+      - name: Gerar checksum SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sha256sum dist/cloud-gamer-desktop.tar \
+            > dist/cloud-gamer-desktop.tar.sha256
+
+          cat dist/cloud-gamer-desktop.tar.sha256
+
+      - name: Publicar artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-gamer-pc-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Resumo da build
+        if: success()
+        run: |
+          echo "## Cloud Gamer PC" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Build concluida com sucesso." >> "$GITHUB_STEP_SUMMARY"
+          echo "- Imagem: $IMAGE_TAG" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Artefato disponivel por 14 dias." >> "$GITHUB_STEP_SUMMARY"
+          echo "- O servidor precisa ser implantado separadamente." >> "$GITHUB_STEP_SUMMARY"
+          
