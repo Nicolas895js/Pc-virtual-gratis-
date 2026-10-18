@@ -1,0 +1,48 @@
+name: "🕹️ Build PC Gamer Windows App"
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Ação:'
+        required: true
+        default: 'apply'
+        type: choice
+        options:
+          - apply
+          - destroy
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    steps:
+      - name: 📂 Clonar Repositório
+        uses: actions/checkout@v4
+
+      - name: 🛠️ Configurar Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.0"
+
+      - name: 🔄 Init
+        run: terraform init
+
+      - name: 🚀 Executar Ação
+        run: |
+          if [ "${{ github.event.inputs.action }}" == "apply" ]; then
+            terraform apply -auto-approve
+            
+            echo "=========================================="
+            echo "🔑 SUA CHAVE PRIVADA DE ACESSO ABAIXO:"
+            echo "Copie TODO o bloco abaixo (incluindo os BEGIN e END) e salve como 'chave.pem'"
+            echo "=========================================="
+            terraform output -raw private_key_pem
+            echo "=========================================="
+          elif [ "${{ github.event.inputs.action }}" == "destroy" ]; then
+            terraform destroy -auto-approve
+          fi
+          
