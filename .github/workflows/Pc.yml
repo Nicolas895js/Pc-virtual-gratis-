@@ -1,36 +1,54 @@
-on:
-  push:
-    branches: ["main"]
-  pull_request:
-    branches: ["main"]
-  workflow_dispatch:
 
-jobs:
-  build:
-    runs-on: windows-latest
+# PC Gamer Cloud
 
-    steps:
-      - name: Baixar o código
-        uses: actions/checkout@v4
+## Requisitos
+- Servidor Linux com Docker e Docker Compose
+- Armazenamento persistente
+- Internet estável
+- GPU compatível para jogos que exigem aceleração gráfica
 
-      - name: Configurar Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+## Construir
+docker compose build
 
-      - name: Instalar dependências
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install pyinstaller
+## Iniciar
+docker compose up -d
 
-      - name: Gerar executável
-        run: |
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --name PCVirtualGamer pc_virtual.py
+## Verificar
+docker compose ps
 
-      - name: Salvar o executável
-        uses: actions/upload-artifact@v4
-        with:
-          name: PCVirtualGamer-Windows
-          path: dist/PCVirtualGamer.exe
-          if-no-files-found: error
-          
+## Ver logs
+docker compose logs -f pc-gamer
+
+## Parar
+docker compose down
+
+## Pastas
+/config  - configurações e arquivos pessoais
+/games   - diretório destinado aos jogos
+
+services:
+  pc-gamer:
+    build: .
+    container_name: pc-gamer-cloud
+    restart: unless-stopped
+
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: America/Sao_Paulo
+      TITLE: "Meu PC Gamer na Nuvem"
+
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+
+    shm_size: "2gb"
+
+    volumes:
+      - pc_config:/config
+      - pc_games:/games
+
+volumes:
+  pc_config:
+  pc_games:
+  
